@@ -1,0 +1,58 @@
+appId: com.morari.translate
+productName: Morari Translate
+copyright: Copyright © 2026 Morari Translate
+
+directories:
+  output: dist-build
+  buildResources: build
+
+# Only the Electron app shell is packaged. The captioning worker lives in a
+# separate repo on the user's machine and is launched by path at runtime, so it
+# is intentionally NOT bundled here. Dev-only helpers under scripts/ are excluded.
+files:
+  - electron/**/*
+  - package.json
+  - "!**/*.map"
+
+asar: true
+
+mac:
+  category: public.app-category.utilities
+  target:
+    - target: dmg
+      arch:
+        - arm64
+        - x64
+  icon: build/icon.png
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+dmg:
+  background: build/dmg-background.png
+  window:
+    width: 540
+    height: 380
+  iconSize: 96
+  contents:
+    - x: 150
+      y: 200
+      type: file
+    - x: 390
+      y: 200
+      type: link
+      path: /Applications
+
+win:
+  target:
+    - target: nsis
+      arch:
+        - x64
+  icon: build/icon.png
+  artifactName: ${productName}-Setup-${version}.${ext}
+
+nsis:
+  oneClick: true
+  perMachine: false
+  allowToChangeInstallationDirectory: false
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: Morari Translate
