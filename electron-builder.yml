@@ -13,6 +13,20 @@ files:
   - electron/**/*
   - package.json
   - "!**/*.map"
+  # The worker ships as an extraResource (outside the asar) so its node_modules
+  # can be installed on first launch — exclude it from the asar to avoid dupes.
+  - "!electron/worker/**/*"
+
+# Bundle the worker source into the app (resources/worker). node_modules and any
+# secrets are intentionally excluded; deps are installed on first launch.
+extraResources:
+  - from: electron/worker
+    to: worker
+    filter:
+      - "**/*"
+      - "!node_modules/**"
+      - "!.env"
+      - "!**/.env"
 
 asar: true
 

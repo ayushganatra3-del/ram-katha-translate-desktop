@@ -2,7 +2,7 @@ import { useState } from "react";
 import { T, styles } from "./theme.js";
 import { Button, IconButton, BackIcon, EyeIcon, EyeOffIcon, WarnIcon, Spinner } from "./ui.jsx";
 
-export default function SettingsScreen({ settings, schema, onClose }) {
+export default function SettingsScreen({ settings, schema, versions, onClose }) {
   const [form, setForm] = useState({ ...settings });
   const [reveal, setReveal] = useState({});
   const [saving, setSaving] = useState(false);
@@ -83,6 +83,12 @@ export default function SettingsScreen({ settings, schema, onClose }) {
               ))}
             </div>
           ))}
+
+          <div style={{ textAlign: "center", color: T.textMuted, fontSize: 12, padding: "8px 0 4px" }}>
+            Morari Translate v{(versions && versions.app) || "?"}
+            {"  ·  "}
+            Worker v{(versions && versions.worker) || "not bundled"}
+          </div>
         </div>
       </div>
 

@@ -32,18 +32,18 @@ const ENV_FILENAME = 'worker.env';
 const SCHEMA = [
   {
     id: 'worker',
-    title: 'Worker Location',
+    title: 'Worker Location (developer override)',
     description:
-      'Where the morari-translate worker repo lives on this machine. The folder must contain src/index.js and an installed node_modules.',
+      'Packaged builds bundle the worker automatically — you never need this. In development only, point at an external worker repo (must contain src/index.js). Leave blank to use the bundled electron/worker.',
     fields: [
       {
         key: 'WORKER_PATH',
-        label: 'Worker Path',
+        label: 'Worker Path (dev only)',
         type: 'path',
         appOnly: true,
-        prominent: true,
-        placeholder: '/Users/you/morari-translate/worker',
-        help: 'Absolute path to the worker repo folder (contains src/index.js).',
+        default: '',
+        placeholder: 'C:\\Users\\you\\morari-translate\\worker',
+        help: 'Optional. Overrides the bundled worker during development.',
       },
     ],
   },
@@ -218,8 +218,18 @@ function loadEnv(userDataDir) {
 function serializeValue(value) {
   const v = value == null ? '' : String(value);
   if (v === '') return '';
-  if (/[\s#"'`$\\]/.test(v) || /[\r\n]/.test(v)) {
-    return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\n/g, '\\n').replace(/\r/g, '') + '"';
+  // Multiline value: double quotes (dotenv re-expands \n on read).
+  if (/[\r\n]/.test(v)) {
+    return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"').replace(/\r?\n/g, '\\n') + '"';
+  }
+  // Needs quoting (spaces, #, quotes, backslashes, etc.)?
+  // Prefer SINGLE quotes: dotenv treats single-quoted values literally, so
+  // Windows paths (C:\Users\...\worker\) and values with spaces survive intact.
+  // Double quotes would let dotenv mangle backslashes (\n, \t, \\), corrupting paths.
+  if (/[\s#"'`$\\]/.test(v)) {
+    if (!v.includes("'")) return "'" + v + "'";
+    // Rare: value contains a single quote -> fall back to double quotes.
+    return '"' + v.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"';
   }
   return v;
 }

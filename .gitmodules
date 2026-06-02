@@ -1,0 +1,4 @@
+[submodule "electron/worker"]
+	path = electron/worker
+	url = https://github.com/ayushganatra3-del/morari-translate
+	branch = main

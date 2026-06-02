@@ -1,0 +1,74 @@
+name: Build installers
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  workflow_dispatch:
+
+permissions:
+  contents: write # required to create/upload GitHub Releases on tags
+
+jobs:
+  build:
+    name: Build ${{ matrix.platform }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest # builds .dmg for darwin-arm64 + darwin-x64
+            platform: mac
+          - os: windows-latest # builds .exe (NSIS) for win32-x64
+            platform: win
+
+    steps:
+      - name: Checkout (with worker submodule)
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          # The worker lives in a separate repo as a submodule. The default
+          # GITHUB_TOKEN cannot read other private repos, so provide a PAT with
+          # read access to the worker repo as the WORKER_REPO_TOKEN secret. If the
+          # worker repo is PUBLIC, no secret is needed (falls back to github.token).
+          token: ${{ secrets.WORKER_REPO_TOKEN || github.token }}
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install app dependencies
+        run: npm ci
+
+      - name: Build renderer bundle
+        run: npm run build:renderer
+
+      - name: Build ${{ matrix.platform }} installer
+        run: npx electron-builder --${{ matrix.platform }} --publish never
+        env:
+          # No signing certs in CI -> skip macOS signing (produces an unsigned .dmg).
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+
+      # On branch pushes (e.g. main): keep installers as downloadable artifacts (7 days).
+      - name: Upload build artifacts
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: morari-translate-${{ matrix.platform }}
+          path: |
+            dist-build/*.dmg
+            dist-build/*.exe
+          retention-days: 7
+          if-no-files-found: ignore
+
+      # On version tags (v*): publish installers to the GitHub Release.
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist-build/*.dmg
+            dist-build/*.exe
+          fail_on_unmatched_files: false

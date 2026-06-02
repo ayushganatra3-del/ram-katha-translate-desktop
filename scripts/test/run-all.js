@@ -14,7 +14,15 @@ const os = require('os');
 const path = require('path');
 
 const envStore = require('../../electron/env-store');
-const { WorkerManager, validateWorkerPath, classifyLine } = require('../../electron/worker-manager');
+const {
+  WorkerManager,
+  validateWorkerPath,
+  classifyLine,
+  chooseWorkerPath,
+  computeSetupPhase,
+  readWorkerVersion,
+  installDependencies,
+} = require('../../electron/worker-manager');
 
 let passed = 0;
 let failed = 0;
@@ -95,6 +103,21 @@ async function testEnvStore() {
     assert.strictEqual(loaded.SESSION_CODE, 'GSJZ76');
     assert.strictEqual(loaded.SUPABASE_SERVICE_KEY, 'eyJhbGciOi.JsdGVzdA');
     assert.strictEqual(loaded.TRANSLATION_OPENAI_API_KEY, 'sk-or-v1-abc with space #hash');
+  });
+
+  await test('saveEnv + loadEnv preserves Windows paths (backslashes intact)', () => {
+    const dir = tmpDir('mt-win-');
+    // Includes \n, \t, \w sequences that naive double-quote escaping would mangle.
+    const cases = [
+      'C:\\Users\\ayush\\.openclaw\\workspace\\worker\\worker\\',
+      'C:\\node\\new\\temp\\report',
+      'D:\\Program Files\\worker',
+    ];
+    for (const winPath of cases) {
+      envStore.saveEnv(dir, { ...envStore.getDefaults(), WORKER_PATH: winPath });
+      const loaded = envStore.loadEnv(dir);
+      assert.strictEqual(loaded.WORKER_PATH, winPath, `round-trip failed for ${winPath}`);
+    }
   });
 
   await test('loadEnv returns defaults when no file exists', () => {
@@ -225,6 +248,60 @@ async function testWorkerManagerPure() {
   });
 }
 
+// ---- bundled-worker setup ----------------------------------------------
+
+async function testBundling() {
+  group('bundled worker setup');
+
+  await test('chooseWorkerPath: packaged build uses resources/worker', () => {
+    const p = chooseWorkerPath({ isPackaged: true, resourcesPath: '/app/resources', bundledDir: '/x', overridePath: '/y' });
+    assert.strictEqual(p, path.join('/app/resources', 'worker'));
+  });
+
+  await test('chooseWorkerPath: dev prefers bundled worker once it has source', () => {
+    const bundled = makeWorkerDir('// worker'); // has package.json
+    const p = chooseWorkerPath({ isPackaged: false, resourcesPath: '/r', bundledDir: bundled, overridePath: '/some/override' });
+    assert.strictEqual(p, bundled);
+  });
+
+  await test('chooseWorkerPath: dev falls back to override when bundled is empty', () => {
+    const emptyBundled = tmpDir('mt-empty-');
+    const override = makeWorkerDir('// worker');
+    const p = chooseWorkerPath({ isPackaged: false, resourcesPath: '/r', bundledDir: emptyBundled, overridePath: override });
+    assert.strictEqual(p, override);
+  });
+
+  await test('computeSetupPhase: missing / needs-install / ready', () => {
+    const missing = tmpDir('mt-miss-');
+    assert.strictEqual(computeSetupPhase(missing), 'missing');
+
+    const needs = tmpDir('mt-needs-');
+    fs.mkdirSync(path.join(needs, 'src'), { recursive: true });
+    fs.writeFileSync(path.join(needs, 'src', 'index.js'), '');
+    fs.writeFileSync(path.join(needs, 'package.json'), '{"name":"w","version":"2.0.0"}');
+    assert.strictEqual(computeSetupPhase(needs), 'needs-install');
+
+    fs.mkdirSync(path.join(needs, 'node_modules'), { recursive: true });
+    assert.strictEqual(computeSetupPhase(needs), 'ready');
+  });
+
+  await test('readWorkerVersion reads version from package.json', () => {
+    const dir = tmpDir('mt-ver-');
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"w","version":"3.4.5"}');
+    assert.strictEqual(readWorkerVersion(dir), '3.4.5');
+    assert.strictEqual(readWorkerVersion(tmpDir('mt-none-')), null);
+  });
+
+  await test('installDependencies runs npm install in the worker dir', async () => {
+    const dir = tmpDir('mt-install-');
+    fs.writeFileSync(path.join(dir, 'package.json'), '{"name":"w","version":"1.0.0","private":true}');
+    const lines = [];
+    const result = await installDependencies(dir, (l) => lines.push(l));
+    assert.strictEqual(result.ok, true, JSON.stringify(result));
+    assert.ok(fs.existsSync(path.join(dir, 'node_modules')), 'node_modules should be created');
+  });
+}
+
 // ---- worker-manager: integration ---------------------------------------
 
 const GOOD_WORKER = `
@@ -315,6 +392,7 @@ async function testWorkerManagerIntegration() {
   console.log('Morari Translate — test suite');
   await testEnvStore();
   await testWorkerManagerPure();
+  await testBundling();
   await testWorkerManagerIntegration();
 
   console.log(`\n${passed} passed, ${failed} failed`);

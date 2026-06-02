@@ -29,6 +29,97 @@ const STATS_THROTTLE_MS = 400; // coalesce stat-driven status emits
 const MAX_LATENCY_SAMPLES = 50;
 
 /**
+ * Decide which worker directory to use (pure / fs-based, no Electron).
+ *  - packaged build  -> the bundled worker under resources/worker
+ *  - development      -> the in-repo bundled worker once it has source,
+ *                        else a configured override (mock/external), else bundled
+ */
+function chooseWorkerPath({ isPackaged, resourcesPath, bundledDir, overridePath }) {
+  if (isPackaged) return path.join(resourcesPath, 'worker');
+  if (bundledDir && fs.existsSync(path.join(bundledDir, 'package.json'))) return bundledDir;
+  if (overridePath && String(overridePath).trim() && fs.existsSync(String(overridePath).trim())) {
+    return String(overridePath).trim();
+  }
+  return bundledDir;
+}
+
+/**
+ * First-launch setup phase for a worker directory.
+ *  'missing'      -> no worker source bundled (package.json / src/index.js absent)
+ *  'needs-install'-> source present but node_modules missing (run npm install)
+ *  'ready'        -> good to go
+ */
+function computeSetupPhase(workerPath) {
+  const hasPkg = workerPath && fs.existsSync(path.join(workerPath, 'package.json'));
+  const hasEntry = workerPath && fs.existsSync(path.join(workerPath, 'src', 'index.js'));
+  if (!hasPkg || !hasEntry) return 'missing';
+  if (!fs.existsSync(path.join(workerPath, 'node_modules'))) return 'needs-install';
+  return 'ready';
+}
+
+/** Read the worker's version from its package.json (or null). */
+function readWorkerVersion(workerPath) {
+  try {
+    const pkg = JSON.parse(fs.readFileSync(path.join(workerPath, 'package.json'), 'utf8'));
+    return pkg.version || null;
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * Run `npm install` in the worker directory (first-launch dependency setup).
+ * Streams output lines to onLog and resolves { ok, error }.
+ */
+function installDependencies(workerPath, onLog) {
+  return new Promise((resolve) => {
+    const emit = (line) => {
+      if (onLog && line) onLog(line);
+    };
+    const isWin = process.platform === 'win32';
+    const npmCmd = isWin ? 'npm.cmd' : 'npm';
+    let child;
+    try {
+      child = spawn(npmCmd, ['install', '--no-audit', '--no-fund', '--loglevel=info'], {
+        cwd: workerPath,
+        env: process.env,
+        shell: isWin, // npm is a .cmd on Windows -> must run through the shell
+      });
+    } catch (err) {
+      resolve({ ok: false, error: `Failed to run npm: ${err.message}` });
+      return;
+    }
+
+    let buf = '';
+    const onData = (chunk) => {
+      buf += chunk.toString('utf8');
+      let i;
+      while ((i = buf.indexOf('\n')) >= 0) {
+        const l = buf.slice(0, i).replace(/\r$/, '');
+        buf = buf.slice(i + 1);
+        emit(l);
+      }
+    };
+    child.stdout.on('data', onData);
+    child.stderr.on('data', onData);
+    child.on('error', (err) => resolve({ ok: false, error: `Failed to run npm: ${err.message}` }));
+    child.on('exit', (code) => {
+      if (buf.trim()) emit(buf.trim());
+      if (code === 0) {
+        // Guarantee node_modules exists so setup is considered complete even
+        // for a worker that happens to declare zero dependencies.
+        try {
+          fs.mkdirSync(path.join(workerPath, 'node_modules'), { recursive: true });
+        } catch (_) {}
+        resolve({ ok: true });
+      } else {
+        resolve({ ok: false, error: `npm install exited with code ${code}` });
+      }
+    });
+  });
+}
+
+/**
  * Validate that a worker repo is present and installed (Part 6).
  * Returns { valid, error } with the exact spec error strings.
  */
@@ -417,4 +508,13 @@ class WorkerManager extends EventEmitter {
   }
 }
 
-module.exports = { WorkerManager, validateWorkerPath, classifyLine, DEFAULT_STATS };
+module.exports = {
+  WorkerManager,
+  validateWorkerPath,
+  classifyLine,
+  DEFAULT_STATS,
+  chooseWorkerPath,
+  computeSetupPhase,
+  readWorkerVersion,
+  installDependencies,
+};
