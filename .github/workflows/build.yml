@@ -23,15 +23,33 @@ jobs:
             platform: win
 
     steps:
-      - name: Checkout (with worker submodule)
+      # Check out the app repo with the default GITHUB_TOKEN (it always has
+      # read access to *this* repo). We do NOT use WORKER_REPO_TOKEN here: that
+      # PAT is scoped to the separate worker repo and gets a 403 on this one.
+      - name: Checkout app repo
         uses: actions/checkout@v4
         with:
-          submodules: recursive
-          # The worker lives in a separate repo as a submodule. The default
-          # GITHUB_TOKEN cannot read other private repos, so provide a PAT with
-          # read access to the worker repo as the WORKER_REPO_TOKEN secret. If the
-          # worker repo is PUBLIC, no secret is needed (falls back to github.token).
-          token: ${{ secrets.WORKER_REPO_TOKEN || github.token }}
+          submodules: false
+          persist-credentials: false
+
+      # The worker lives in a separate (private) repo as a submodule. Fetch it
+      # with WORKER_REPO_TOKEN, which has read access to that repo. We inject the
+      # PAT via insteadOf so the exact pinned submodule commit (from .gitmodules)
+      # is checked out. If the secret is empty the worker repo is assumed public.
+      - name: Check out worker submodule
+        shell: bash
+        env:
+          WORKER_REPO_TOKEN: ${{ secrets.WORKER_REPO_TOKEN }}
+        run: |
+          if [ -z "${WORKER_REPO_TOKEN}" ]; then
+            echo "WORKER_REPO_TOKEN is empty — assuming the worker repo is public."
+          else
+            git config --global url."https://x-access-token:${WORKER_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+          fi
+          git submodule sync --recursive
+          git submodule update --init --recursive
+          echo "Worker submodule checked out:"
+          ls -la electron/worker | head -n 20
 
       - name: Set up Node.js
         uses: actions/setup-node@v4
