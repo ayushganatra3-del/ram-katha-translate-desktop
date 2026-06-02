@@ -27,6 +27,11 @@ contextBridge.exposeInMainWorld('workerAPI', {
   saveSettings: (env) => ipcRenderer.invoke('save-settings', env),
   loadSettings: () => ipcRenderer.invoke('load-settings'),
 
+  // First-launch worker setup (bundled worker dependency install).
+  getSetupStatus: () => ipcRenderer.invoke('get-setup-status'),
+  installWorker: () => ipcRenderer.invoke('install-worker'),
+  onSetupLog: (cb) => subscribe('setup-log', cb),
+
   /**
    * Enumerate audio input devices.
    *

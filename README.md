@@ -46,14 +46,16 @@ ram-katha-translate-desktop/
       styles.css         global styles, design tokens, animations
       index.js           React entry
       components/
-        App.jsx          root: screen routing + worker event wiring
+        App.jsx          root: setup gating + screen routing + event wiring
         SetupScreen.jsx
         MonitorScreen.jsx
         SettingsScreen.jsx
+        FirstRunScreen.jsx  first-launch dependency install
         LogFeed.jsx
         StatRow.jsx
         theme.js         design tokens + shared style fragments
         ui.jsx           shared atoms (buttons, icons, spinner, logo)
+    worker/              bundled worker source (copy in from morari-translate)
   scripts/
     build-renderer.js    esbuild bundler for the renderer
     generate-assets.js   makes build/icon.png + dmg background (sharp)
@@ -68,10 +70,44 @@ ram-katha-translate-desktop/
 
 ## Prerequisites
 
-- **Node.js 18+** installed and on the `PATH` (the worker is run as `node`).
-- The **morari-translate worker** repo on the same machine, with its
-  dependencies installed (`npm install` inside the worker folder so
-  `node_modules` exists).
+- **Node.js 18+** installed and on the `PATH`. The worker is a Node app, so the
+  target machine needs Node to run it and to install its libraries on first
+  launch. (The installer bundles the worker *source*; it does not bundle a Node
+  runtime.)
+
+## Self-contained worker
+
+The worker ships **inside** the app so the installer is self-contained — no
+separate worker checkout per machine. `electron/worker/` is a **git submodule**
+pointing at the morari-translate worker repo; electron-builder copies it to
+`resources/worker`, and on **first launch** the app runs `npm install` there
+automatically (a one-time ~30s "First-time setup" screen), then never asks
+again. No Worker Path configuration is shown to end users.
+
+Clone the desktop repo **with submodules** so you get the worker source:
+
+```bash
+git clone --recurse-submodules https://github.com/ayushganatra3-del/ram-katha-translate-desktop.git
+# already cloned without --recurse-submodules?
+git submodule update --init --recursive
+```
+
+See [`electron/worker/README.md`](electron/worker/README.md) for registering,
+updating, and private-repo auth.
+
+## Continuous builds & releases
+
+`.github/workflows/build.yml` builds installers on a Mac + Windows matrix
+(checking out the worker submodule with `submodules: recursive`):
+
+- **Push to `main`** → uploads `.dmg` and `.exe` as build artifacts (7-day
+  retention, for testing).
+- **Push a `v*` tag** → publishes the `.dmg` (darwin-arm64 + darwin-x64) and
+  `.exe` (win32-x64) to a **GitHub Release**.
+
+If the worker submodule is **private**, add a repository secret
+`WORKER_REPO_TOKEN` — a PAT with read access to the worker repo — so CI can
+check out the submodule. (Public worker repo → no secret needed.)
 
 ---
 
@@ -101,6 +137,12 @@ Then in **Settings** set **Worker Path** to the absolute path of
 and press **Start Session** on the Setup screen.
 
 ---
+
+## End-user setup (the whole thing)
+
+Install → open the app → (first launch installs the engine, ~30s once) → open
+**Settings**, paste your keys → **Save** → set the **Session Code** → **Start**.
+That's it. No worker path, no terminal.
 
 ## Configuration
 

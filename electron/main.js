@@ -13,7 +13,14 @@ const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const path = require('path');
 
 const envStore = require('./env-store');
-const { WorkerManager, validateWorkerPath } = require('./worker-manager');
+const {
+  WorkerManager,
+  validateWorkerPath,
+  chooseWorkerPath,
+  computeSetupPhase,
+  readWorkerVersion,
+  installDependencies,
+} = require('./worker-manager');
 
 const isDev = process.argv.includes('--dev');
 // Test-only hook: when MT_SMOKE_SCREENSHOT points at a path, the app renders,
@@ -27,6 +34,27 @@ const workerManager = new WorkerManager();
 function userDataDir() {
   return app.getPath('userData');
 }
+
+// Resolve the worker directory. In a packaged build the worker ships inside the
+// app (resources/worker) and needs no user config; in development we use the
+// in-repo electron/worker once it has source, otherwise a configured override.
+function resolveWorkerPath(env) {
+  return chooseWorkerPath({
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    bundledDir: path.join(__dirname, 'worker'),
+    overridePath: env && env.WORKER_PATH,
+  });
+}
+
+// In packaged builds the worker path is automatic, so hide the Worker Path
+// (developer-only) field from Settings.
+function schemaForRenderer() {
+  if (!app.isPackaged) return envStore.SCHEMA;
+  return envStore.SCHEMA.filter((section) => section.id !== 'worker');
+}
+
+let setupInstallRunning = false;
 
 // ---- Window -------------------------------------------------------------
 
@@ -112,12 +140,47 @@ workerManager.on('status', (data) => sendToRenderer('worker-status', data));
 
 ipcMain.handle('load-settings', () => {
   const env = envStore.loadEnv(userDataDir());
+  const workerPath = resolveWorkerPath(env);
   return {
     env,
-    schema: envStore.SCHEMA,
-    worker: validateWorkerPath(env.WORKER_PATH),
+    schema: schemaForRenderer(),
+    worker: validateWorkerPath(workerPath),
     config: envStore.validateConfig(env),
+    appVersion: app.getVersion(),
+    workerVersion: readWorkerVersion(workerPath),
+    isPackaged: app.isPackaged,
   };
+});
+
+// First-launch setup status: is the bundled worker present and installed?
+ipcMain.handle('get-setup-status', () => {
+  const env = envStore.loadEnv(userDataDir());
+  const workerPath = resolveWorkerPath(env);
+  return {
+    phase: computeSetupPhase(workerPath),
+    workerPath,
+    appVersion: app.getVersion(),
+    workerVersion: readWorkerVersion(workerPath),
+  };
+});
+
+// Run `npm install` in the bundled worker on first launch, streaming output.
+ipcMain.handle('install-worker', async () => {
+  if (setupInstallRunning) return { ok: false, error: 'Setup already running.' };
+  const env = envStore.loadEnv(userDataDir());
+  const workerPath = resolveWorkerPath(env);
+  if (computeSetupPhase(workerPath) === 'missing') {
+    return { ok: false, error: `Worker source not found at ${workerPath}.` };
+  }
+  setupInstallRunning = true;
+  sendToRenderer('setup-log', 'Installing worker dependencies (first launch only)…');
+  try {
+    const result = await installDependencies(workerPath, (line) => sendToRenderer('setup-log', line));
+    if (result.ok) sendToRenderer('setup-log', 'Done. Starting the app…');
+    return result;
+  } finally {
+    setupInstallRunning = false;
+  }
 });
 
 ipcMain.handle('save-settings', (_event, incoming) => {
@@ -148,7 +211,7 @@ ipcMain.handle('worker-start', (_event, sessionConfig) => {
   }
 
   const workerEnv = envStore.toWorkerEnv(env, sessionConfig || {});
-  return workerManager.start({ workerPath: env.WORKER_PATH, env: workerEnv });
+  return workerManager.start({ workerPath: resolveWorkerPath(env), env: workerEnv });
 });
 
 ipcMain.handle('worker-stop', () => workerManager.stop());
