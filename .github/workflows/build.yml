@@ -32,23 +32,30 @@ jobs:
           submodules: false
           persist-credentials: false
 
-      # The worker lives in a separate (private) repo as a submodule. Fetch it
-      # with WORKER_REPO_TOKEN, which has read access to that repo. We inject the
-      # PAT via insteadOf so the exact pinned submodule commit (from .gitmodules)
-      # is checked out. If the secret is empty the worker repo is assumed public.
-      - name: Check out worker submodule
+      # The worker is a separate PRIVATE repo (bundled at electron/worker, which
+      # is a git submodule). The default GITHUB_TOKEN cannot read other repos, so
+      # check it out with WORKER_REPO_TOKEN — a PAT that must have read (Contents)
+      # access to ayushganatra3-del/morari-translate. Using actions/checkout here
+      # (instead of `git submodule update`) handles the auth the canonical way.
+      - name: Check out worker (private repo)
+        uses: actions/checkout@v4
+        with:
+          repository: ayushganatra3-del/morari-translate
+          ref: main
+          token: ${{ secrets.WORKER_REPO_TOKEN }}
+          path: electron/worker
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Verify worker checked out
         shell: bash
-        env:
-          WORKER_REPO_TOKEN: ${{ secrets.WORKER_REPO_TOKEN }}
         run: |
-          if [ -z "${WORKER_REPO_TOKEN}" ]; then
-            echo "WORKER_REPO_TOKEN is empty — assuming the worker repo is public."
-          else
-            git config --global url."https://x-access-token:${WORKER_REPO_TOKEN}@github.com/".insteadOf "https://github.com/"
+          if [ ! -e electron/worker/package.json ]; then
+            echo "::error::electron/worker is empty — worker checkout failed. Ensure WORKER_REPO_TOKEN has read access to ayushganatra3-del/morari-translate."
+            ls -la electron/worker || true
+            exit 1
           fi
-          git submodule sync --recursive
-          git submodule update --init --recursive
-          echo "Worker submodule checked out:"
+          echo "Worker checked out:"
           ls -la electron/worker | head -n 20
 
       - name: Set up Node.js
