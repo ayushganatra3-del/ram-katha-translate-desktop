@@ -60,7 +60,7 @@ const SCHEMA = [
         default: 'https://haysrsrrqowqucfqdalq.supabase.co',
       },
       {
-        key: 'SUPABASE_SERVICE_KEY',
+        key: 'SUPABASE_SERVICE_ROLE_KEY',
         label: 'Service Role Key',
         type: 'password',
         sensitive: true,

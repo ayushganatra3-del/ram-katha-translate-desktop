@@ -93,7 +93,7 @@ async function testEnvStore() {
     const dir = tmpDir('mt-env-');
     const cfg = {
       ...envStore.getDefaults(),
-      SUPABASE_SERVICE_KEY: 'eyJhbGciOi.JsdGVzdA',
+      SUPABASE_SERVICE_ROLE_KEY: 'eyJhbGciOi.JsdGVzdA',
       SESSION_CODE: 'GSJZ76',
       TRANSLATION_OPENAI_API_KEY: 'sk-or-v1-abc with space #hash',
     };
@@ -101,7 +101,7 @@ async function testEnvStore() {
     assert.ok(fs.existsSync(file));
     const loaded = envStore.loadEnv(dir);
     assert.strictEqual(loaded.SESSION_CODE, 'GSJZ76');
-    assert.strictEqual(loaded.SUPABASE_SERVICE_KEY, 'eyJhbGciOi.JsdGVzdA');
+    assert.strictEqual(loaded.SUPABASE_SERVICE_ROLE_KEY, 'eyJhbGciOi.JsdGVzdA');
     assert.strictEqual(loaded.TRANSLATION_OPENAI_API_KEY, 'sk-or-v1-abc with space #hash');
   });
 
@@ -129,7 +129,7 @@ async function testEnvStore() {
   await test('validateConfig: full config is OK', () => {
     const env = {
       ...envStore.getDefaults(),
-      SUPABASE_SERVICE_KEY: 'k',
+      SUPABASE_SERVICE_ROLE_KEY: 'k',
       SARVAM_API_KEY: 'k',
       TRANSLATION_OPENAI_API_KEY: 'k',
       SESSION_CODE: 'GSJZ76',
@@ -148,7 +148,7 @@ async function testEnvStore() {
     const env = {
       ...envStore.getDefaults(),
       STT_PROVIDER: 'openai',
-      SUPABASE_SERVICE_KEY: 'k',
+      SUPABASE_SERVICE_ROLE_KEY: 'k',
       SARVAM_API_KEY: 'k',
       TRANSLATION_OPENAI_API_KEY: 'k',
     };
@@ -160,7 +160,7 @@ async function testEnvStore() {
   await test('validateConfig: bad SESSION_CODE rejected', () => {
     const env = {
       ...envStore.getDefaults(),
-      SUPABASE_SERVICE_KEY: 'k',
+      SUPABASE_SERVICE_ROLE_KEY: 'k',
       SARVAM_API_KEY: 'k',
       TRANSLATION_OPENAI_API_KEY: 'k',
       SESSION_CODE: 'bad code!',

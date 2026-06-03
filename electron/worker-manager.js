@@ -292,6 +292,9 @@ class WorkerManager extends EventEmitter {
 
   _spawn() {
     let child;
+    // [debug] confirm the configured env vars actually reach the worker. Logs
+    // key NAMES only — never values — so secrets stay out of the terminal.
+    console.log('[debug] env keys being passed to worker:', Object.keys(this.workerEnv || {}));
     try {
       child = spawn(this.nodeBinary, [this.workerScript], {
         cwd: this.workerPath,
