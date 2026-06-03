@@ -23,35 +23,19 @@ jobs:
             platform: win
 
     steps:
-      # Check out the app repo with the default GITHUB_TOKEN (it always has
-      # read access to *this* repo). We do NOT use WORKER_REPO_TOKEN here: that
-      # PAT is scoped to the separate worker repo and gets a 403 on this one.
-      - name: Checkout app repo
+      # The worker ships bundled at electron/worker (a git submodule pointing at
+      # ayushganatra3-del/morari-translate). That repo is PUBLIC, so the default
+      # GITHUB_TOKEN can read both this repo and the submodule — no PAT needed.
+      - name: Checkout (with worker submodule)
         uses: actions/checkout@v4
         with:
-          submodules: false
-          persist-credentials: false
-
-      # The worker is a separate PRIVATE repo (bundled at electron/worker, which
-      # is a git submodule). The default GITHUB_TOKEN cannot read other repos, so
-      # check it out with WORKER_REPO_TOKEN — a PAT that must have read (Contents)
-      # access to ayushganatra3-del/morari-translate. Using actions/checkout here
-      # (instead of `git submodule update`) handles the auth the canonical way.
-      - name: Check out worker (private repo)
-        uses: actions/checkout@v4
-        with:
-          repository: ayushganatra3-del/morari-translate
-          ref: main
-          token: ${{ secrets.WORKER_REPO_TOKEN }}
-          path: electron/worker
           submodules: recursive
-          persist-credentials: false
 
       - name: Verify worker checked out
         shell: bash
         run: |
           if [ ! -e electron/worker/package.json ]; then
-            echo "::error::electron/worker is empty — worker checkout failed. Ensure WORKER_REPO_TOKEN has read access to ayushganatra3-del/morari-translate."
+            echo "::error::electron/worker is empty — submodule checkout failed. Ensure ayushganatra3-del/morari-translate is public (or readable by the build)."
             ls -la electron/worker || true
             exit 1
           fi
