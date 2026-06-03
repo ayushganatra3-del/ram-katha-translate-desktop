@@ -17,12 +17,14 @@ echo "==> Node $(node -v)"
 
 # 1. Make sure the worker submodule is checked out (you own morari-translate,
 #    so your normal git credentials are used — no PAT needed locally).
-if [ ! -f electron/worker/package.json ]; then
+#    The submodule is the full morari-translate repo; the actual worker lives
+#    in its nested worker/ subdir → electron/worker/worker.
+if [ ! -f electron/worker/worker/package.json ]; then
   echo "==> Fetching worker submodule (electron/worker)…"
   git submodule update --init --recursive
 fi
-if [ ! -f electron/worker/package.json ] || [ ! -f electron/worker/src/index.js ]; then
-  echo "ERROR: electron/worker looks empty (need package.json + src/index.js)." >&2
+if [ ! -f electron/worker/worker/package.json ] || [ ! -f electron/worker/worker/src/index.js ]; then
+  echo "ERROR: electron/worker/worker looks empty (need package.json + src/index.js)." >&2
   echo "       Run: git submodule update --init --recursive" >&2
   exit 1
 fi
@@ -34,9 +36,9 @@ if [ ! -d node_modules ]; then
 fi
 
 # 3. Worker dependencies (the app would otherwise install these on first launch).
-if [ ! -d electron/worker/node_modules ]; then
+if [ ! -d electron/worker/worker/node_modules ]; then
   echo "==> Installing worker dependencies (one-time)…"
-  ( cd electron/worker && npm install )
+  ( cd electron/worker/worker && npm install )
 fi
 
 # 4. Build the renderer bundle and launch Electron in dev mode.

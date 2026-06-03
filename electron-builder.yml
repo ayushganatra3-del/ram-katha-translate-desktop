@@ -17,10 +17,13 @@ files:
   # can be installed on first launch — exclude it from the asar to avoid dupes.
   - "!electron/worker/**/*"
 
-# Bundle the worker source into the app (resources/worker). node_modules and any
-# secrets are intentionally excluded; deps are installed on first launch.
+# Bundle the worker source into the app (resources/worker). The electron/worker
+# submodule is the full morari-translate repo, whose worker lives in a nested
+# worker/ subdir — copy only that (keeps the packaged path consistent with dev
+# and avoids shipping the unused Next.js frontend). node_modules and any secrets
+# are intentionally excluded; deps are installed on first launch.
 extraResources:
-  - from: electron/worker
+  - from: electron/worker/worker
     to: worker
     filter:
       - "**/*"

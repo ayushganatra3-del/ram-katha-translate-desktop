@@ -37,12 +37,17 @@ function userDataDir() {
 
 // Resolve the worker directory. In a packaged build the worker ships inside the
 // app (resources/worker) and needs no user config; in development we use the
-// in-repo electron/worker once it has source, otherwise a configured override.
+// in-repo worker once it has source, otherwise a configured override.
+//
+// The electron/worker submodule is the *full* morari-translate repo, whose
+// actual worker lives in a nested `worker/` subdirectory — so the dev source is
+// electron/worker/worker (package.json + src/index.js live there). Packaged
+// builds copy only that subdir to resources/worker (see electron-builder.yml).
 function resolveWorkerPath(env) {
   return chooseWorkerPath({
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
-    bundledDir: path.join(__dirname, 'worker'),
+    bundledDir: path.join(__dirname, 'worker', 'worker'),
     overridePath: env && env.WORKER_PATH,
   });
 }
