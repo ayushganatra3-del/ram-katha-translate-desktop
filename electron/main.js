@@ -234,6 +234,7 @@ ipcMain.handle('worker-start', async (_event, sessionConfig) => {
       sessionCode,
       mode: sessionMode,
       status: 'live',
+      youtubeUrl: isWatchback ? (sessionConfig && sessionConfig.youtubeUrl) : undefined,
     });
     sendToRenderer(
       'worker-log',

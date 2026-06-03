@@ -45,7 +45,7 @@ const MODE_COLUMN = 'session_mode';
  * @param {string} [opts.codeColumn] override code column (default "code")
  * @returns {Promise<{ok:boolean, error?:string, status?:number}>}
  */
-async function ensureSession({ url, serviceKey, sessionCode, mode, status, table, codeColumn } = {}) {
+async function ensureSession({ url, serviceKey, sessionCode, mode, status, youtubeUrl, table, codeColumn } = {}) {
   if (!url || !serviceKey) {
     return { ok: false, error: 'Supabase URL or service-role key not configured.' };
   }
@@ -67,6 +67,7 @@ async function ensureSession({ url, serviceKey, sessionCode, mode, status, table
   const row = { [col]: sessionCode };
   if (mode) row[MODE_COLUMN] = mode;
   if (status) row.status = status;
+  if (youtubeUrl) row.youtube_url = youtubeUrl;
 
   try {
     const res = await fetch(endpoint, {
