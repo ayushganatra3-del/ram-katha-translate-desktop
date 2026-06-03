@@ -22,11 +22,17 @@ const DEFAULT_CODE_COLUMN = 'code';
 
 // Session mode values the worker (src/index.js) routes on. The worker reads
 // these from the Supabase session row's `session_mode` column, NOT from the
-// MODE env var. Confirmed against the worker's mode dispatch:
-//   - SESSION_MODE_MIC ('live_input')        -> runInputSession (mic / audio).
-//   - SESSION_MODE_WATCHBACK ('recorded_youtube') -> recorded YouTube playback.
+// MODE env var. Confirmed against the worker's mode dispatch (isAudioInputMode /
+// isYouTubeMode in src/index.js):
+//   - SESSION_MODE_MIC ('live_input')             -> runInputSession (mic / mixer / audio device).
+//   - SESSION_MODE_LIVE_YOUTUBE ('live_youtube')  -> runYouTubeSession, live-edge of a live stream.
+//   - SESSION_MODE_RECORDED_YOUTUBE ('recorded_youtube') -> runYouTubeSession, recorded video from the start.
+// For both YouTube modes the worker reads the URL from the row's `youtube_url`.
 const SESSION_MODE_MIC = 'live_input';
-const SESSION_MODE_WATCHBACK = 'recorded_youtube';
+const SESSION_MODE_LIVE_YOUTUBE = 'live_youtube';
+const SESSION_MODE_RECORDED_YOUTUBE = 'recorded_youtube';
+// Back-compat alias: the old "watchback" UI mapped to recorded YouTube.
+const SESSION_MODE_WATCHBACK = SESSION_MODE_RECORDED_YOUTUBE;
 
 // The worker's session-mode column is `session_mode` (not `mode`).
 const MODE_COLUMN = 'session_mode';
@@ -98,5 +104,7 @@ module.exports = {
   DEFAULT_CODE_COLUMN,
   MODE_COLUMN,
   SESSION_MODE_MIC,
+  SESSION_MODE_LIVE_YOUTUBE,
+  SESSION_MODE_RECORDED_YOUTUBE,
   SESSION_MODE_WATCHBACK,
 };

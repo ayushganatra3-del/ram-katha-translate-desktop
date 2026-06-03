@@ -176,41 +176,62 @@ async function testEnvStore() {
     assert.strictEqual(envStore.parseTimeToSeconds(''), 0);
   });
 
-  await test('toWorkerEnv strips app-only keys and maps live source (dshow uses label)', () => {
+  await test('toWorkerEnv strips app-only keys and maps mic source (dshow uses label)', () => {
     const env = { ...envStore.getDefaults(), WORKER_PATH: '/some/path' };
     const out = envStore.toWorkerEnv(env, {
       sessionCode: 'gsjz76',
-      mode: 'live',
+      mode: 'mic',
       audioDeviceId: 'dev1',
       audioDeviceLabel: 'Scarlett 2i2',
     }, 'win32');
     assert.strictEqual(out.WORKER_PATH, undefined, 'WORKER_PATH must not leak to worker');
     assert.strictEqual(out.SESSION_CODE, 'GSJZ76');
-    assert.strictEqual(out.MODE, 'live');
+    assert.strictEqual(out.MODE, 'mic');
     assert.strictEqual(out.AUDIO_INPUT_DEVICE, 'Scarlett 2i2');
     assert.strictEqual(out.STT_PROVIDER, 'sarvam');
+  });
+
+  await test('toWorkerEnv maps legacy "live" alias to mic', () => {
+    const out = envStore.toWorkerEnv(envStore.getDefaults(), {
+      sessionCode: 'gsjz76',
+      mode: 'live',
+      audioDeviceLabel: 'Scarlett 2i2',
+    }, 'win32');
+    assert.strictEqual(out.MODE, 'mic');
+    assert.strictEqual(out.AUDIO_INPUT_DEVICE, 'Scarlett 2i2');
   });
 
   await test('toWorkerEnv uses avfoundation index ":0" on macOS (not the display name)', () => {
     const out = envStore.toWorkerEnv(envStore.getDefaults(), {
       sessionCode: 'gsjz76',
-      mode: 'live',
+      mode: 'mic',
       audioDeviceId: 'dev1',
       audioDeviceLabel: 'Default - MacBook Pro Microphone (Built-in)',
     }, 'darwin');
     assert.strictEqual(out.AUDIO_INPUT_DEVICE, ':0');
   });
 
-  await test('toWorkerEnv maps watchback source', () => {
+  await test('toWorkerEnv: YouTube modes carry no audio-device env (URL/mode come from the session row)', () => {
+    for (const mode of ['live_youtube', 'recorded_youtube']) {
+      const out = envStore.toWorkerEnv(envStore.getDefaults(), {
+        sessionCode: 'ABCD',
+        mode,
+        youtubeUrl: 'https://youtu.be/x',
+      }, 'darwin');
+      assert.strictEqual(out.MODE, mode);
+      assert.strictEqual(out.AUDIO_INPUT_DEVICE, undefined);
+      assert.strictEqual(out.WATCHBACK_URL, undefined);
+    }
+  });
+
+  await test('toWorkerEnv maps legacy "watchback" alias to recorded_youtube', () => {
     const out = envStore.toWorkerEnv(envStore.getDefaults(), {
       sessionCode: 'ABCD',
       mode: 'watchback',
       youtubeUrl: 'https://youtu.be/x',
-      startPosition: '02:05',
-    });
-    assert.strictEqual(out.MODE, 'watchback');
-    assert.strictEqual(out.WATCHBACK_URL, 'https://youtu.be/x');
-    assert.strictEqual(out.WATCHBACK_START_SECONDS, '125');
+    }, 'darwin');
+    assert.strictEqual(out.MODE, 'recorded_youtube');
+    assert.strictEqual(out.AUDIO_INPUT_DEVICE, undefined);
   });
 }
 

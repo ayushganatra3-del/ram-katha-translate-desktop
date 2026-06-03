@@ -13,7 +13,12 @@ const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const path = require('path');
 
 const envStore = require('./env-store');
-const { ensureSession, SESSION_MODE_MIC, SESSION_MODE_WATCHBACK } = require('./supabase-session');
+const {
+  ensureSession,
+  SESSION_MODE_MIC,
+  SESSION_MODE_LIVE_YOUTUBE,
+  SESSION_MODE_RECORDED_YOUTUBE,
+} = require('./supabase-session');
 const {
   WorkerManager,
   validateWorkerPath,
@@ -223,18 +228,30 @@ ipcMain.handle('worker-start', async (_event, sessionConfig) => {
   const sessionCode = String(merged.SESSION_CODE || '').trim().toUpperCase();
   if (sessionCode) {
     // The worker reads mode/status from the session ROW (not the MODE env var).
-    // Pick the mode from the Setup-screen selection (LIVE/mic vs WATCHBACK/
-    // YouTube) and force status=live so the worker starts capturing immediately
-    // instead of sitting in "waiting for live".
-    const isWatchback = String((sessionConfig && sessionConfig.mode) || 'live').toLowerCase() === 'watchback';
-    const sessionMode = isWatchback ? SESSION_MODE_WATCHBACK : SESSION_MODE_MIC;
+    // Map the Setup-screen selection to the worker's session_mode and force
+    // status=live so the worker starts capturing immediately instead of sitting
+    // in "waiting for live". The Setup screen offers three sources:
+    //   'mic'              -> live_input      (microphone / mixer / audio device)
+    //   'live_youtube'     -> live_youtube    (live stream, from the live edge)
+    //   'recorded_youtube' -> recorded_youtube(recorded video, from the start)
+    const setupMode = String((sessionConfig && sessionConfig.mode) || 'mic').toLowerCase();
+    let sessionMode;
+    if (setupMode === 'live_youtube') {
+      sessionMode = SESSION_MODE_LIVE_YOUTUBE;
+    } else if (setupMode === 'recorded_youtube' || setupMode === 'watchback') {
+      sessionMode = SESSION_MODE_RECORDED_YOUTUBE; // 'watchback' kept as a back-compat alias
+    } else {
+      sessionMode = SESSION_MODE_MIC;
+    }
+    const isYouTube = sessionMode === SESSION_MODE_LIVE_YOUTUBE || sessionMode === SESSION_MODE_RECORDED_YOUTUBE;
+    const youtubeUrl = isYouTube ? String((sessionConfig && sessionConfig.youtubeUrl) || '').trim() : undefined;
     const r = await ensureSession({
       url: env.SUPABASE_URL,
       serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
       sessionCode,
       mode: sessionMode,
       status: 'live',
-      youtubeUrl: isWatchback ? (sessionConfig && sessionConfig.youtubeUrl) : undefined,
+      youtubeUrl: youtubeUrl || undefined,
     });
     sendToRenderer(
       'worker-log',

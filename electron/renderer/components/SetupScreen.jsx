@@ -3,16 +3,20 @@ import { T, styles } from "./theme.js";
 import { Button, IconButton, GearIcon, PlayIcon, RefreshIcon, WarnIcon, Logo, Spinner } from "./ui.jsx";
 
 const SESSION_CODE_RE = /^[A-Z0-9]{4,8}$/;
-const TIME_RE = /^(\d{1,2}:)?\d{1,2}:\d{2}$/; // mm:ss or h:mm:ss
+
+// Setup source modes -> worker session_mode (mapped in main.js):
+//   "mic"              -> live_input        (microphone / mixer / audio device)
+//   "live_youtube"     -> live_youtube      (live stream, from the live edge)
+//   "recorded_youtube" -> recorded_youtube  (recorded video, from the start)
+const isYouTubeMode = (m) => m === "live_youtube" || m === "recorded_youtube";
 
 export default function SetupScreen({ settings, workerValidation, onStart, onOpenSettings, onRefresh }) {
   const [sessionCode, setSessionCode] = useState((settings.SESSION_CODE || "").toUpperCase());
-  const [mode, setMode] = useState("live");
+  const [mode, setMode] = useState("mic");
   const [audioDevices, setAudioDevices] = useState([]);
   const [audioDeviceId, setAudioDeviceId] = useState("");
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [youtubeUrl, setYoutubeUrl] = useState("");
-  const [startPosition, setStartPosition] = useState("00:00");
   const [error, setError] = useState(null);
   const [starting, setStarting] = useState(false);
 
@@ -31,7 +35,7 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
   }, []);
 
   useEffect(() => {
-    if (mode === "live") loadDevices();
+    if (mode === "mic") loadDevices();
   }, [mode, loadDevices]);
 
   const workerOk = workerValidation && workerValidation.valid;
@@ -40,12 +44,9 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
     if (!SESSION_CODE_RE.test(sessionCode)) {
       return "Session Code must be 4–8 uppercase letters/numbers (e.g. GSJZ76).";
     }
-    if (mode === "watchback") {
-      if (!youtubeUrl.trim()) return "Enter a YouTube URL for watchback mode.";
+    if (isYouTubeMode(mode)) {
+      if (!youtubeUrl.trim()) return "Enter a YouTube URL.";
       if (!/^https?:\/\//i.test(youtubeUrl.trim())) return "YouTube URL must start with http(s)://";
-      if (startPosition.trim() && !TIME_RE.test(startPosition.trim())) {
-        return "Start Position must be mm:ss (e.g. 12:30).";
-      }
     }
     return null;
   };
@@ -65,10 +66,9 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
     const cfg = {
       sessionCode: sessionCode.trim().toUpperCase(),
       mode,
-      audioDeviceId: mode === "live" ? audioDeviceId : "",
-      audioDeviceLabel: mode === "live" && selected ? selected.label : "",
-      youtubeUrl: mode === "watchback" ? youtubeUrl.trim() : "",
-      startPosition: mode === "watchback" ? startPosition.trim() : "",
+      audioDeviceId: mode === "mic" ? audioDeviceId : "",
+      audioDeviceLabel: mode === "mic" && selected ? selected.label : "",
+      youtubeUrl: isYouTubeMode(mode) ? youtubeUrl.trim() : "",
     };
     setStarting(true);
     try {
@@ -121,21 +121,24 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
             />
           </Field>
 
-          {/* Mode toggle */}
-          <Field label="Mode">
+          {/* Source mode */}
+          <Field label="Source">
             <div style={{ display: "flex", gap: 8 }}>
-              <ModeButton active={mode === "live"} onClick={() => setMode("live")}>
-                🎙️ LIVE
+              <ModeButton active={mode === "mic"} onClick={() => setMode("mic")}>
+                🎙️ MIC / MIXER
               </ModeButton>
-              <ModeButton active={mode === "watchback"} onClick={() => setMode("watchback")}>
-                ▶️ WATCHBACK
+              <ModeButton active={mode === "live_youtube"} onClick={() => setMode("live_youtube")}>
+                🔴 LIVE YOUTUBE
+              </ModeButton>
+              <ModeButton active={mode === "recorded_youtube"} onClick={() => setMode("recorded_youtube")}>
+                ▶️ RECORDED YOUTUBE
               </ModeButton>
             </div>
           </Field>
 
-          {/* Live: audio input */}
-          {mode === "live" && (
-            <Field label="Audio Input" help="System microphone or line-in used to capture the katha audio.">
+          {/* Mic / mixer: audio input device */}
+          {mode === "mic" && (
+            <Field label="Audio Input" help="System microphone, mixer or line-in used to capture the katha audio.">
               <div style={{ display: "flex", gap: 8 }}>
                 <select
                   style={{ ...styles.input, flex: 1 }}
@@ -156,26 +159,23 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
             </Field>
           )}
 
-          {/* Watchback: youtube url + start */}
-          {mode === "watchback" && (
-            <>
-              <Field label="YouTube URL">
-                <input
-                  style={styles.input}
-                  value={youtubeUrl}
-                  placeholder="https://www.youtube.com/watch?v=..."
-                  onChange={(e) => setYoutubeUrl(e.target.value)}
-                />
-              </Field>
-              <Field label="Start Position" help="Where to begin in the video (mm:ss).">
-                <input
-                  style={{ ...styles.input, width: 140 }}
-                  value={startPosition}
-                  placeholder="00:00"
-                  onChange={(e) => setStartPosition(e.target.value)}
-                />
-              </Field>
-            </>
+          {/* Live / Recorded YouTube: URL */}
+          {isYouTubeMode(mode) && (
+            <Field
+              label="YouTube URL"
+              help={
+                mode === "live_youtube"
+                  ? "Live stream URL. Captioning starts from the live edge."
+                  : "Recorded video URL. Captioning plays through from the beginning."
+              }
+            >
+              <input
+                style={styles.input}
+                value={youtubeUrl}
+                placeholder="https://www.youtube.com/watch?v=..."
+                onChange={(e) => setYoutubeUrl(e.target.value)}
+              />
+            </Field>
           )}
 
           {error && (
@@ -222,10 +222,14 @@ function ModeButton({ active, onClick, children }) {
       onClick={onClick}
       style={{
         flex: 1,
-        padding: "12px",
+        padding: "10px 6px",
         borderRadius: 8,
         fontWeight: 700,
-        letterSpacing: 0.5,
+        fontSize: 11.5,
+        letterSpacing: 0.2,
+        lineHeight: 1.25,
+        textAlign: "center",
+        cursor: "pointer",
         border: `1px solid ${active ? T.saffron : T.border}`,
         background: active ? `${T.saffron}22` : T.bg,
         color: active ? T.saffron : T.textMuted,

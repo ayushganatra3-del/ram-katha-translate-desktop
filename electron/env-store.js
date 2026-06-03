@@ -154,13 +154,22 @@ const SCHEMA = [
         key: 'SOURCE_CONTEXT_WINDOW_MS',
         label: 'Source Context Window (ms)',
         type: 'number',
-        default: '60000',
+        default: '30000',
+        help: '30000 (30s) keeps translator input tokens under the ~2000 ceiling that warned at 60s.',
       },
       {
         key: 'CANONICAL_MATCH_MIN_TRIGGER_LEN',
         label: 'Canonical Min Trigger Length',
         type: 'number',
         default: '8',
+      },
+      {
+        key: 'MINIMAL_PIPELINE',
+        label: 'Minimal Pipeline (debug)',
+        type: 'select',
+        default: 'off',
+        options: ['off', 'on'],
+        help: 'On = STT → translate → display only (bypasses canonical, corpus and locked-work). For verification only.',
       },
     ],
   },
@@ -344,15 +353,14 @@ function toWorkerEnv(savedEnv, sessionConfig = {}, platform = process.platform) 
     out.SESSION_CODE = String(sessionConfig.sessionCode).trim().toUpperCase();
   }
 
-  const mode = (sessionConfig.mode || 'live').toLowerCase();
+  // Setup source mode: 'mic' | 'live_youtube' | 'recorded_youtube'
+  // ('live'/'watchback' accepted as back-compat aliases for mic/recorded).
+  const rawMode = (sessionConfig.mode || 'mic').toLowerCase();
+  const mode = rawMode === 'live' ? 'mic' : (rawMode === 'watchback' ? 'recorded_youtube' : rawMode);
   out.MODE = mode;
 
-  if (mode === 'watchback') {
-    if (sessionConfig.youtubeUrl) out.WATCHBACK_URL = String(sessionConfig.youtubeUrl).trim();
-    const startSeconds = parseTimeToSeconds(sessionConfig.startPosition);
-    out.WATCHBACK_START_SECONDS = String(startSeconds);
-    if (sessionConfig.startPosition) out.WATCHBACK_START = String(sessionConfig.startPosition).trim();
-  } else {
+  const isMic = mode === 'mic';
+  if (isMic) {
     // macOS captures audio via ffmpeg's avfoundation input, which addresses
     // devices by INDEX (":0" = system default mic), NOT by display name. Passing
     // the display name (e.g. "Default - MacBook Pro Microphone (Built-in)")
@@ -365,6 +373,9 @@ function toWorkerEnv(savedEnv, sessionConfig = {}, platform = process.platform) 
     }
     if (sessionConfig.audioDeviceId) out.AUDIO_INPUT_DEVICE_ID = String(sessionConfig.audioDeviceId);
   }
+  // For live_youtube / recorded_youtube the worker reads the URL and mode from
+  // the Supabase session row (youtube_url / session_mode), set by ensureSession
+  // in main.js — no audio-device or URL env vars are needed here.
 
   return out;
 }
