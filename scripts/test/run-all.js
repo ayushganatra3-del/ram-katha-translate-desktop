@@ -176,19 +176,29 @@ async function testEnvStore() {
     assert.strictEqual(envStore.parseTimeToSeconds(''), 0);
   });
 
-  await test('toWorkerEnv strips app-only keys and maps live source', () => {
+  await test('toWorkerEnv strips app-only keys and maps live source (dshow uses label)', () => {
     const env = { ...envStore.getDefaults(), WORKER_PATH: '/some/path' };
     const out = envStore.toWorkerEnv(env, {
       sessionCode: 'gsjz76',
       mode: 'live',
       audioDeviceId: 'dev1',
       audioDeviceLabel: 'Scarlett 2i2',
-    });
+    }, 'win32');
     assert.strictEqual(out.WORKER_PATH, undefined, 'WORKER_PATH must not leak to worker');
     assert.strictEqual(out.SESSION_CODE, 'GSJZ76');
     assert.strictEqual(out.MODE, 'live');
     assert.strictEqual(out.AUDIO_INPUT_DEVICE, 'Scarlett 2i2');
     assert.strictEqual(out.STT_PROVIDER, 'sarvam');
+  });
+
+  await test('toWorkerEnv uses avfoundation index ":0" on macOS (not the display name)', () => {
+    const out = envStore.toWorkerEnv(envStore.getDefaults(), {
+      sessionCode: 'gsjz76',
+      mode: 'live',
+      audioDeviceId: 'dev1',
+      audioDeviceLabel: 'Default - MacBook Pro Microphone (Built-in)',
+    }, 'darwin');
+    assert.strictEqual(out.AUDIO_INPUT_DEVICE, ':0');
   });
 
   await test('toWorkerEnv maps watchback source', () => {

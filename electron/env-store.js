@@ -327,8 +327,9 @@ function parseTimeToSeconds(value) {
  *
  * @param {object} savedEnv      merged settings (output of loadEnv)
  * @param {object} sessionConfig { sessionCode, mode, audioDeviceId, audioDeviceLabel, youtubeUrl, startPosition }
+ * @param {string} platform      OS platform (defaults to process.platform); injectable for tests
  */
-function toWorkerEnv(savedEnv, sessionConfig = {}) {
+function toWorkerEnv(savedEnv, sessionConfig = {}, platform = process.platform) {
   const out = {};
   const appOnlyKeys = new Set(allFields().filter((f) => f.appOnly).map((f) => f.key));
 
@@ -352,7 +353,16 @@ function toWorkerEnv(savedEnv, sessionConfig = {}) {
     out.WATCHBACK_START_SECONDS = String(startSeconds);
     if (sessionConfig.startPosition) out.WATCHBACK_START = String(sessionConfig.startPosition).trim();
   } else {
-    if (sessionConfig.audioDeviceLabel) out.AUDIO_INPUT_DEVICE = String(sessionConfig.audioDeviceLabel);
+    // macOS captures audio via ffmpeg's avfoundation input, which addresses
+    // devices by INDEX (":0" = system default mic), NOT by display name. Passing
+    // the display name (e.g. "Default - MacBook Pro Microphone (Built-in)")
+    // fails on avfoundation — that format only works with Windows dshow. So on
+    // macOS always send ":0" (default device); elsewhere send the display label.
+    if (platform === 'darwin') {
+      out.AUDIO_INPUT_DEVICE = ':0';
+    } else if (sessionConfig.audioDeviceLabel) {
+      out.AUDIO_INPUT_DEVICE = String(sessionConfig.audioDeviceLabel);
+    }
     if (sessionConfig.audioDeviceId) out.AUDIO_INPUT_DEVICE_ID = String(sessionConfig.audioDeviceId);
   }
 
