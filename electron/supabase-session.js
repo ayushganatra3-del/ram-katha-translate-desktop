@@ -20,19 +20,30 @@
 const DEFAULT_TABLE = 'sessions';
 const DEFAULT_CODE_COLUMN = 'code';
 
+// Session mode values the worker (src/index.js) routes on. The worker reads
+// these from the Supabase session row, NOT from the MODE env var.
+//   - SESSION_MODE_YOUTUBE: confirmed from worker logs ("mode:live_youtube").
+//   - SESSION_MODE_MIC: routes to runInputSession (microphone / audio input).
+//     *** BEST GUESS — verify against the worker's src/index.js dispatch and
+//     change this one constant if it differs. ***
+const SESSION_MODE_YOUTUBE = 'live_youtube';
+const SESSION_MODE_MIC = 'live_mic';
+
 /**
- * Upsert a row keyed by the session code. Idempotent: an existing row is left
- * in place (merge-duplicates), so re-using a code is never an error.
+ * Upsert a row keyed by the session code. Idempotent: an existing row is merged
+ * (merge-duplicates), so re-using a code is never an error.
  *
  * @param {object} opts
  * @param {string} opts.url          SUPABASE_URL
  * @param {string} opts.serviceKey   SUPABASE_SERVICE_ROLE_KEY
  * @param {string} opts.sessionCode  the configured session code (e.g. GSJZ76)
+ * @param {string} [opts.mode]       session mode column (e.g. live_mic / live_youtube)
+ * @param {string} [opts.status]     session status column (e.g. "live")
  * @param {string} [opts.table]      override table name (default "sessions")
  * @param {string} [opts.codeColumn] override code column (default "code")
  * @returns {Promise<{ok:boolean, error?:string, status?:number}>}
  */
-async function ensureSession({ url, serviceKey, sessionCode, table, codeColumn } = {}) {
+async function ensureSession({ url, serviceKey, sessionCode, mode, status, table, codeColumn } = {}) {
   if (!url || !serviceKey) {
     return { ok: false, error: 'Supabase URL or service-role key not configured.' };
   }
@@ -48,6 +59,13 @@ async function ensureSession({ url, serviceKey, sessionCode, table, codeColumn }
   const base = String(url).replace(/\/+$/, '');
   const endpoint = `${base}/rest/v1/${encodeURIComponent(tbl)}?on_conflict=${encodeURIComponent(col)}`;
 
+  // Only set the code by default; add mode/status when provided so the worker
+  // starts capturing immediately (status=live) in the right mode instead of
+  // sitting in "waiting for live".
+  const row = { [col]: sessionCode };
+  if (mode) row.mode = mode;
+  if (status) row.status = status;
+
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -58,7 +76,7 @@ async function ensureSession({ url, serviceKey, sessionCode, table, codeColumn }
         // merge-duplicates => upsert; return=minimal => no body echoed back.
         Prefer: 'resolution=merge-duplicates,return=minimal',
       },
-      body: JSON.stringify([{ [col]: sessionCode }]),
+      body: JSON.stringify([row]),
     });
 
     if (!res.ok) {
@@ -71,4 +89,10 @@ async function ensureSession({ url, serviceKey, sessionCode, table, codeColumn }
   }
 }
 
-module.exports = { ensureSession, DEFAULT_TABLE, DEFAULT_CODE_COLUMN };
+module.exports = {
+  ensureSession,
+  DEFAULT_TABLE,
+  DEFAULT_CODE_COLUMN,
+  SESSION_MODE_YOUTUBE,
+  SESSION_MODE_MIC,
+};

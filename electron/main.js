@@ -13,7 +13,7 @@ const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const path = require('path');
 
 const envStore = require('./env-store');
-const { ensureSession } = require('./supabase-session');
+const { ensureSession, SESSION_MODE_MIC, SESSION_MODE_YOUTUBE } = require('./supabase-session');
 const {
   WorkerManager,
   validateWorkerPath,
@@ -222,16 +222,24 @@ ipcMain.handle('worker-start', async (_event, sessionConfig) => {
   // a warning and still start — an existing session is found by the worker.
   const sessionCode = String(merged.SESSION_CODE || '').trim().toUpperCase();
   if (sessionCode) {
+    // The worker reads mode/status from the session ROW (not the MODE env var).
+    // Pick the mode from the Setup-screen selection (LIVE/mic vs WATCHBACK/
+    // YouTube) and force status=live so the worker starts capturing immediately
+    // instead of sitting in "waiting for live".
+    const isWatchback = String((sessionConfig && sessionConfig.mode) || 'live').toLowerCase() === 'watchback';
+    const sessionMode = isWatchback ? SESSION_MODE_YOUTUBE : SESSION_MODE_MIC;
     const r = await ensureSession({
       url: env.SUPABASE_URL,
       serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
       sessionCode,
+      mode: sessionMode,
+      status: 'live',
     });
     sendToRenderer(
       'worker-log',
       r.ok
-        ? { line: `[session] session "${sessionCode}" ready in Supabase`, level: 'green', ts: Date.now() }
-        : { line: `[session] could not auto-create session "${sessionCode}": ${r.error} — starting anyway`, level: 'yellow', ts: Date.now() }
+        ? { line: `[session] session "${sessionCode}" set live (mode=${sessionMode}, status=live)`, level: 'green', ts: Date.now() }
+        : { line: `[session] could not set session "${sessionCode}": ${r.error} — starting anyway`, level: 'yellow', ts: Date.now() }
     );
   }
 
