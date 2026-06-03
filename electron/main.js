@@ -13,7 +13,7 @@ const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const path = require('path');
 
 const envStore = require('./env-store');
-const { ensureSession, SESSION_MODE_MIC, SESSION_MODE_YOUTUBE } = require('./supabase-session');
+const { ensureSession, SESSION_MODE_MIC, SESSION_MODE_WATCHBACK } = require('./supabase-session');
 const {
   WorkerManager,
   validateWorkerPath,
@@ -227,7 +227,7 @@ ipcMain.handle('worker-start', async (_event, sessionConfig) => {
     // YouTube) and force status=live so the worker starts capturing immediately
     // instead of sitting in "waiting for live".
     const isWatchback = String((sessionConfig && sessionConfig.mode) || 'live').toLowerCase() === 'watchback';
-    const sessionMode = isWatchback ? SESSION_MODE_YOUTUBE : SESSION_MODE_MIC;
+    const sessionMode = isWatchback ? SESSION_MODE_WATCHBACK : SESSION_MODE_MIC;
     const r = await ensureSession({
       url: env.SUPABASE_URL,
       serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,

@@ -21,13 +21,15 @@ const DEFAULT_TABLE = 'sessions';
 const DEFAULT_CODE_COLUMN = 'code';
 
 // Session mode values the worker (src/index.js) routes on. The worker reads
-// these from the Supabase session row, NOT from the MODE env var.
-//   - SESSION_MODE_YOUTUBE: confirmed from worker logs ("mode:live_youtube").
-//   - SESSION_MODE_MIC: routes to runInputSession (microphone / audio input).
-//     *** BEST GUESS — verify against the worker's src/index.js dispatch and
-//     change this one constant if it differs. ***
-const SESSION_MODE_YOUTUBE = 'live_youtube';
-const SESSION_MODE_MIC = 'live_mic';
+// these from the Supabase session row's `session_mode` column, NOT from the
+// MODE env var. Confirmed against the worker's mode dispatch:
+//   - SESSION_MODE_MIC ('live_input')        -> runInputSession (mic / audio).
+//   - SESSION_MODE_WATCHBACK ('recorded_youtube') -> recorded YouTube playback.
+const SESSION_MODE_MIC = 'live_input';
+const SESSION_MODE_WATCHBACK = 'recorded_youtube';
+
+// The worker's session-mode column is `session_mode` (not `mode`).
+const MODE_COLUMN = 'session_mode';
 
 /**
  * Upsert a row keyed by the session code. Idempotent: an existing row is merged
@@ -63,7 +65,7 @@ async function ensureSession({ url, serviceKey, sessionCode, mode, status, table
   // starts capturing immediately (status=live) in the right mode instead of
   // sitting in "waiting for live".
   const row = { [col]: sessionCode };
-  if (mode) row.mode = mode;
+  if (mode) row[MODE_COLUMN] = mode;
   if (status) row.status = status;
 
   try {
@@ -93,6 +95,7 @@ module.exports = {
   ensureSession,
   DEFAULT_TABLE,
   DEFAULT_CODE_COLUMN,
-  SESSION_MODE_YOUTUBE,
+  MODE_COLUMN,
   SESSION_MODE_MIC,
+  SESSION_MODE_WATCHBACK,
 };
