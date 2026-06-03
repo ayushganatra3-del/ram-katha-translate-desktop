@@ -293,8 +293,15 @@ class WorkerManager extends EventEmitter {
   _spawn() {
     let child;
     // [debug] confirm the configured env vars actually reach the worker. Logs
-    // key NAMES only — never values — so secrets stay out of the terminal.
-    console.log('[debug] env keys being passed to worker:', Object.keys(this.workerEnv || {}));
+    // key NAMES, a few NON-secret values, and secret presence as booleans —
+    // never secret values. Lets us see e.g. that STT_PROVIDER=sarvam is sent.
+    const e = this.workerEnv || {};
+    console.log('[debug] env keys being passed to worker:', Object.keys(e));
+    console.log(
+      '[debug] STT_PROVIDER=%s SARVAM_MODEL=%s SARVAM_LANGUAGE_CODE=%s MODE=%s OPENAI_BASE_URL=%s | set? SARVAM_API_KEY=%s OPENAI_API_KEY=%s SUPABASE_SERVICE_ROLE_KEY=%s',
+      e.STT_PROVIDER, e.SARVAM_MODEL, e.SARVAM_LANGUAGE_CODE, e.MODE, e.OPENAI_BASE_URL,
+      !!e.SARVAM_API_KEY, !!e.OPENAI_API_KEY, !!e.SUPABASE_SERVICE_ROLE_KEY
+    );
     try {
       child = spawn(this.nodeBinary, [this.workerScript], {
         cwd: this.workerPath,

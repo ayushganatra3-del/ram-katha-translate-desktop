@@ -13,6 +13,7 @@ const { app, BrowserWindow, ipcMain, shell, session } = require('electron');
 const path = require('path');
 
 const envStore = require('./env-store');
+const { ensureSession } = require('./supabase-session');
 const {
   WorkerManager,
   validateWorkerPath,
@@ -205,7 +206,7 @@ ipcMain.handle('save-settings', (_event, incoming) => {
   };
 });
 
-ipcMain.handle('worker-start', (_event, sessionConfig) => {
+ipcMain.handle('worker-start', async (_event, sessionConfig) => {
   const env = envStore.loadEnv(userDataDir());
 
   // Validate the saved config before spawning a doomed worker.
@@ -213,6 +214,25 @@ ipcMain.handle('worker-start', (_event, sessionConfig) => {
   const config = envStore.validateConfig(merged);
   if (!config.ok) {
     return { ok: false, error: `Config error: ${config.fatal}` };
+  }
+
+  // Auto-create the session in Supabase so the worker never crashes with
+  // "Session not found" the first time a code is used. Best-effort and
+  // non-blocking: if it fails (already exists, or table/column differs) we log
+  // a warning and still start — an existing session is found by the worker.
+  const sessionCode = String(merged.SESSION_CODE || '').trim().toUpperCase();
+  if (sessionCode) {
+    const r = await ensureSession({
+      url: env.SUPABASE_URL,
+      serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
+      sessionCode,
+    });
+    sendToRenderer(
+      'worker-log',
+      r.ok
+        ? { line: `[session] session "${sessionCode}" ready in Supabase`, level: 'green', ts: Date.now() }
+        : { line: `[session] could not auto-create session "${sessionCode}": ${r.error} — starting anyway`, level: 'yellow', ts: Date.now() }
+    );
   }
 
   const workerEnv = envStore.toWorkerEnv(env, sessionConfig || {});
