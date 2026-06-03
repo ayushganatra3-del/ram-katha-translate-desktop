@@ -21,6 +21,30 @@ const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
 
+// On macOS, GUI/Electron processes inherit a minimal PATH (launchd) that omits
+// the Homebrew prefixes where ffmpeg and yt-dlp are installed. Any subprocess we
+// spawn — the worker, and in turn the ffmpeg/yt-dlp children it spawns — would
+// otherwise fail with ENOENT. Prepend the common Homebrew/local bin dirs so the
+// tools resolve. No-op on other platforms.
+const MAC_EXTRA_PATHS = ['/opt/homebrew/bin', '/usr/local/bin'];
+
+/**
+ * Return an env clone whose PATH has the macOS Homebrew/local bin dirs prepended
+ * (only those not already present). Returns the env unchanged off macOS.
+ */
+function withToolPath(env) {
+  if (process.platform !== 'darwin') return env;
+  const out = { ...env };
+  // PATH casing is canonical on macOS/Linux, but be defensive about an existing
+  // value under a different key from a merged Windows-style env.
+  const key = Object.keys(out).find((k) => k.toUpperCase() === 'PATH') || 'PATH';
+  const current = out[key] || '';
+  const parts = current ? current.split(path.delimiter) : [];
+  const missing = MAC_EXTRA_PATHS.filter((p) => !parts.includes(p));
+  out[key] = [...missing, ...parts].join(path.delimiter);
+  return out;
+}
+
 const RESTART_DELAY_MS = 3000; // wait before auto-restart (Part 2 #8)
 const CRASH_WINDOW_MS = 60000; // circuit-breaker window
 const MAX_CRASHES = 3; // crashes within the window before giving up
@@ -82,7 +106,7 @@ function installDependencies(workerPath, onLog) {
     try {
       child = spawn(npmCmd, ['install', '--no-audit', '--no-fund', '--loglevel=info'], {
         cwd: workerPath,
-        env: process.env,
+        env: withToolPath({ ...process.env }),
         shell: isWin, // npm is a .cmd on Windows -> must run through the shell
       });
     } catch (err) {
@@ -305,7 +329,7 @@ class WorkerManager extends EventEmitter {
     try {
       child = spawn(this.nodeBinary, [this.workerScript], {
         cwd: this.workerPath,
-        env: { ...process.env, ...this.workerEnv },
+        env: withToolPath({ ...process.env, ...this.workerEnv }),
         detached: false,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
@@ -527,4 +551,5 @@ module.exports = {
   computeSetupPhase,
   readWorkerVersion,
   installDependencies,
+  withToolPath,
 };
