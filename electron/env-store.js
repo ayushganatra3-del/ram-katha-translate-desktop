@@ -353,10 +353,12 @@ function toWorkerEnv(savedEnv, sessionConfig = {}, platform = process.platform) 
     out.SESSION_CODE = String(sessionConfig.sessionCode).trim().toUpperCase();
   }
 
-  // Setup source mode: 'mic' | 'live_youtube' | 'recorded_youtube'
-  // ('live'/'watchback' accepted as back-compat aliases for mic/recorded).
+  // Setup source mode: 'mic' | 'live_youtube' | 'recorded_youtube' | 'watchback'
+  // ('live' accepted as a back-compat alias for mic). The worker reads the
+  // authoritative session_mode from the Supabase row; MODE here is informational
+  // and drives the isMic branch below.
   const rawMode = (sessionConfig.mode || 'mic').toLowerCase();
-  const mode = rawMode === 'live' ? 'mic' : (rawMode === 'watchback' ? 'recorded_youtube' : rawMode);
+  const mode = rawMode === 'live' ? 'mic' : rawMode;
   out.MODE = mode;
 
   const isMic = mode === 'mic';
@@ -373,9 +375,9 @@ function toWorkerEnv(savedEnv, sessionConfig = {}, platform = process.platform) 
     }
     if (sessionConfig.audioDeviceId) out.AUDIO_INPUT_DEVICE_ID = String(sessionConfig.audioDeviceId);
   }
-  // For live_youtube / recorded_youtube the worker reads the URL and mode from
-  // the Supabase session row (youtube_url / session_mode), set by ensureSession
-  // in main.js — no audio-device or URL env vars are needed here.
+  // For live_youtube / recorded_youtube / watchback the worker reads the URL and
+  // mode from the Supabase session row (youtube_url / session_mode), set by
+  // ensureSession in main.js — no audio-device or URL env vars are needed here.
 
   return out;
 }

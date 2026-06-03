@@ -8,7 +8,9 @@ const SESSION_CODE_RE = /^[A-Z0-9]{4,8}$/;
 //   "mic"              -> live_input        (microphone / mixer / audio device)
 //   "live_youtube"     -> live_youtube      (live stream, from the live edge)
 //   "recorded_youtube" -> recorded_youtube  (recorded video, from the start)
-const isYouTubeMode = (m) => m === "live_youtube" || m === "recorded_youtube";
+//   "watchback"        -> watchback         (recorded video; watch page plays in
+//                                            sync with captions, followable/pausable)
+const isYouTubeMode = (m) => m === "live_youtube" || m === "recorded_youtube" || m === "watchback";
 
 export default function SetupScreen({ settings, workerValidation, onStart, onOpenSettings, onRefresh }) {
   const [sessionCode, setSessionCode] = useState((settings.SESSION_CODE || "").toUpperCase());
@@ -123,7 +125,7 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
 
           {/* Source mode */}
           <Field label="Source">
-            <div style={{ display: "flex", gap: 8 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <ModeButton active={mode === "mic"} onClick={() => setMode("mic")}>
                 🎙️ MIC / MIXER
               </ModeButton>
@@ -132,6 +134,9 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
               </ModeButton>
               <ModeButton active={mode === "recorded_youtube"} onClick={() => setMode("recorded_youtube")}>
                 ▶️ RECORDED YOUTUBE
+              </ModeButton>
+              <ModeButton active={mode === "watchback"} onClick={() => setMode("watchback")}>
+                🟡 WATCHBACK (SYNCED)
               </ModeButton>
             </div>
           </Field>
@@ -166,6 +171,8 @@ export default function SetupScreen({ settings, workerValidation, onStart, onOpe
               help={
                 mode === "live_youtube"
                   ? "Live stream URL. Captioning starts from the live edge."
+                  : mode === "watchback"
+                  ? "Recorded video URL. The watch page plays this video in sync with the captions (followable / pausable)."
                   : "Recorded video URL. Captioning plays through from the beginning."
               }
             >

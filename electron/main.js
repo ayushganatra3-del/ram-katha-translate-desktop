@@ -15,9 +15,11 @@ const path = require('path');
 const envStore = require('./env-store');
 const {
   ensureSession,
+  seedWatchbackState,
   SESSION_MODE_MIC,
   SESSION_MODE_LIVE_YOUTUBE,
   SESSION_MODE_RECORDED_YOUTUBE,
+  SESSION_MODE_WATCHBACK,
 } = require('./supabase-session');
 const {
   WorkerManager,
@@ -230,20 +232,28 @@ ipcMain.handle('worker-start', async (_event, sessionConfig) => {
     // The worker reads mode/status from the session ROW (not the MODE env var).
     // Map the Setup-screen selection to the worker's session_mode and force
     // status=live so the worker starts capturing immediately instead of sitting
-    // in "waiting for live". The Setup screen offers three sources:
+    // in "waiting for live". The Setup screen offers four sources:
     //   'mic'              -> live_input      (microphone / mixer / audio device)
     //   'live_youtube'     -> live_youtube    (live stream, from the live edge)
     //   'recorded_youtube' -> recorded_youtube(recorded video, from the start)
+    //   'watchback'        -> watchback       (recorded video, watch page synced
+    //                                          to captions; followable/pausable)
     const setupMode = String((sessionConfig && sessionConfig.mode) || 'mic').toLowerCase();
     let sessionMode;
     if (setupMode === 'live_youtube') {
       sessionMode = SESSION_MODE_LIVE_YOUTUBE;
-    } else if (setupMode === 'recorded_youtube' || setupMode === 'watchback') {
-      sessionMode = SESSION_MODE_RECORDED_YOUTUBE; // 'watchback' kept as a back-compat alias
+    } else if (setupMode === 'recorded_youtube') {
+      sessionMode = SESSION_MODE_RECORDED_YOUTUBE;
+    } else if (setupMode === 'watchback') {
+      sessionMode = SESSION_MODE_WATCHBACK;
     } else {
       sessionMode = SESSION_MODE_MIC;
     }
-    const isYouTube = sessionMode === SESSION_MODE_LIVE_YOUTUBE || sessionMode === SESSION_MODE_RECORDED_YOUTUBE;
+    const isWatchback = sessionMode === SESSION_MODE_WATCHBACK;
+    const isYouTube =
+      sessionMode === SESSION_MODE_LIVE_YOUTUBE ||
+      sessionMode === SESSION_MODE_RECORDED_YOUTUBE ||
+      isWatchback;
     const youtubeUrl = isYouTube ? String((sessionConfig && sessionConfig.youtubeUrl) || '').trim() : undefined;
     const r = await ensureSession({
       url: env.SUPABASE_URL,
@@ -252,6 +262,7 @@ ipcMain.handle('worker-start', async (_event, sessionConfig) => {
       mode: sessionMode,
       status: 'live',
       youtubeUrl: youtubeUrl || undefined,
+      returnRow: isWatchback, // need sessions.id to seed watchback_state
     });
     sendToRenderer(
       'worker-log',
@@ -259,6 +270,29 @@ ipcMain.handle('worker-start', async (_event, sessionConfig) => {
         ? { line: `[session] session "${sessionCode}" set live (mode=${sessionMode}, status=live)`, level: 'green', ts: Date.now() }
         : { line: `[session] could not set session "${sessionCode}": ${r.error} — starting anyway`, level: 'yellow', ts: Date.now() }
     );
+
+    // Watchback: seed watchback_state so the worker streams from the start and
+    // the watch page plays the embedded video in sync with the captions.
+    if (isWatchback && r.ok) {
+      const sessionId = r.row && r.row.id;
+      if (sessionId) {
+        const wb = await seedWatchbackState({
+          url: env.SUPABASE_URL,
+          serviceKey: env.SUPABASE_SERVICE_ROLE_KEY,
+          sessionId,
+          startMs: 0,
+          status: 'playing',
+        });
+        sendToRenderer(
+          'worker-log',
+          wb.ok
+            ? { line: `[session] watchback room ready (playing from 0:00)`, level: 'green', ts: Date.now() }
+            : { line: `[session] watchback_state seed failed: ${wb.error} — video may not sync`, level: 'yellow', ts: Date.now() }
+        );
+      } else {
+        sendToRenderer('worker-log', { line: `[session] watchback: no session id returned — video may not sync`, level: 'yellow', ts: Date.now() });
+      }
+    }
   }
 
   const workerEnv = envStore.toWorkerEnv(env, sessionConfig || {});

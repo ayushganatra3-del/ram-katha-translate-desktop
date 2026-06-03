@@ -31,8 +31,12 @@ const DEFAULT_CODE_COLUMN = 'code';
 const SESSION_MODE_MIC = 'live_input';
 const SESSION_MODE_LIVE_YOUTUBE = 'live_youtube';
 const SESSION_MODE_RECORDED_YOUTUBE = 'recorded_youtube';
-// Back-compat alias: the old "watchback" UI mapped to recorded YouTube.
-const SESSION_MODE_WATCHBACK = SESSION_MODE_RECORDED_YOUTUBE;
+// Watchback: a recorded video whose watch-page player is kept IN SYNC with the
+// captions (followable / pausable) via the watchback_state row. The worker
+// routes this to runWatchbackSession(); the watch page renders WatchbackPlayer.
+// Distinct from recorded_youtube (which streams captions but does not sync the
+// embedded video to them).
+const SESSION_MODE_WATCHBACK = 'watchback';
 
 // The worker's session-mode column is `session_mode` (not `mode`).
 const MODE_COLUMN = 'session_mode';
@@ -51,7 +55,7 @@ const MODE_COLUMN = 'session_mode';
  * @param {string} [opts.codeColumn] override code column (default "code")
  * @returns {Promise<{ok:boolean, error?:string, status?:number}>}
  */
-async function ensureSession({ url, serviceKey, sessionCode, mode, status, youtubeUrl, table, codeColumn } = {}) {
+async function ensureSession({ url, serviceKey, sessionCode, mode, status, youtubeUrl, table, codeColumn, returnRow } = {}) {
   if (!url || !serviceKey) {
     return { ok: false, error: 'Supabase URL or service-role key not configured.' };
   }
@@ -75,6 +79,9 @@ async function ensureSession({ url, serviceKey, sessionCode, mode, status, youtu
   if (status) row.status = status;
   if (youtubeUrl) row.youtube_url = youtubeUrl;
 
+  // Watchback seeding needs the session id, so optionally echo the row back.
+  const returnPref = returnRow ? 'return=representation' : 'return=minimal';
+
   try {
     const res = await fetch(endpoint, {
       method: 'POST',
@@ -82,12 +89,71 @@ async function ensureSession({ url, serviceKey, sessionCode, mode, status, youtu
         apikey: serviceKey,
         Authorization: `Bearer ${serviceKey}`,
         'Content-Type': 'application/json',
-        // merge-duplicates => upsert; return=minimal => no body echoed back.
-        Prefer: 'resolution=merge-duplicates,return=minimal',
+        // merge-duplicates => upsert.
+        Prefer: `resolution=merge-duplicates,${returnPref}`,
       },
       body: JSON.stringify([row]),
     });
 
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      return { ok: false, status: res.status, error: `Supabase ${res.status}: ${detail || res.statusText}` };
+    }
+    let returnedRow = null;
+    if (returnRow) {
+      const body = await res.json().catch(() => null);
+      returnedRow = Array.isArray(body) ? body[0] : body;
+    }
+    return { ok: true, status: res.status, row: returnedRow };
+  } catch (err) {
+    return { ok: false, error: err && err.message ? err.message : String(err) };
+  }
+}
+
+/**
+ * Seed (upsert) the watchback_state row for a synced "Watchback" session so the
+ * worker (runWatchbackSession) starts streaming from `startMs` and the watch
+ * page (WatchbackPlayer) plays the embedded video in lock-step with captions.
+ *
+ * Keyed by session_id (UNIQUE). Defaults to playing from the beginning so the
+ * desktop "Start session" button produces a synced room with no extra steps.
+ *
+ * @param {object} opts
+ * @param {string} opts.url          SUPABASE_URL
+ * @param {string} opts.serviceKey   SUPABASE_SERVICE_ROLE_KEY
+ * @param {string} opts.sessionId    sessions.id (uuid)
+ * @param {number} [opts.startMs]    playback start offset in ms (default 0)
+ * @param {string} [opts.status]     'playing' | 'paused' (default 'playing')
+ * @returns {Promise<{ok:boolean, error?:string, status?:number}>}
+ */
+async function seedWatchbackState({ url, serviceKey, sessionId, startMs, status } = {}) {
+  if (!url || !serviceKey) return { ok: false, error: 'Supabase not configured.' };
+  if (!sessionId) return { ok: false, error: 'No session id for watchback_state.' };
+  if (typeof fetch !== 'function') return { ok: false, error: 'fetch unavailable (needs Node 18+).' };
+
+  const base = String(url).replace(/\/+$/, '');
+  const endpoint = `${base}/rest/v1/watchback_state?on_conflict=session_id`;
+  const now = new Date().toISOString();
+  const playbackStatus = status || 'playing';
+  const row = {
+    session_id:           sessionId,
+    playback_status:      playbackStatus,
+    playback_position_ms: Number.isFinite(startMs) ? Math.max(0, Math.floor(startMs)) : 0,
+    playback_started_at:  playbackStatus === 'playing' ? now : null,
+    playback_updated_at:  now,
+  };
+
+  try {
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: {
+        apikey: serviceKey,
+        Authorization: `Bearer ${serviceKey}`,
+        'Content-Type': 'application/json',
+        Prefer: 'resolution=merge-duplicates,return=minimal',
+      },
+      body: JSON.stringify([row]),
+    });
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       return { ok: false, status: res.status, error: `Supabase ${res.status}: ${detail || res.statusText}` };
@@ -100,6 +166,7 @@ async function ensureSession({ url, serviceKey, sessionCode, mode, status, youtu
 
 module.exports = {
   ensureSession,
+  seedWatchbackState,
   DEFAULT_TABLE,
   DEFAULT_CODE_COLUMN,
   MODE_COLUMN,
