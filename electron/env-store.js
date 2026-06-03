@@ -114,7 +114,7 @@ const SCHEMA = [
     description: 'Translation runs through OpenRouter (not OpenAI directly).',
     fields: [
       {
-        key: 'TRANSLATION_OPENAI_API_KEY',
+        key: 'OPENAI_API_KEY',
         label: 'OpenRouter API Key',
         type: 'password',
         sensitive: true,
@@ -122,7 +122,7 @@ const SCHEMA = [
         placeholder: 'sk-or-v1-...',
       },
       {
-        key: 'TRANSLATION_OPENAI_BASE_URL',
+        key: 'OPENAI_BASE_URL',
         label: 'Base URL',
         type: 'text',
         required: true,
@@ -170,8 +170,8 @@ const SCHEMA = [
     description:
       'Optional. If OpenRouter is unavailable, switch the OpenRouter Translation fields above to a fallback provider. Example values:',
     note:
-      'TRANSLATION_OPENAI_BASE_URL = https://api.quatarly.cloud/v1\n' +
-      'TRANSLATION_OPENAI_API_KEY = qua-sub-...\n' +
+      'OPENAI_BASE_URL = https://api.quatarly.cloud/v1\n' +
+      'OPENAI_API_KEY = qua-sub-...\n' +
       'DEFAULT_MODEL = gemini-3-flash',
     fields: [],
   },
@@ -294,9 +294,9 @@ function validateConfig(env) {
     errors.push('SESSION_CODE must be 4–8 uppercase letters/numbers (e.g. GSJZ76).');
   }
 
-  const baseUrl = String(env.TRANSLATION_OPENAI_BASE_URL || '').trim();
+  const baseUrl = String(env.OPENAI_BASE_URL || '').trim();
   if (baseUrl && !/^https?:\/\//i.test(baseUrl)) {
-    errors.push('TRANSLATION_OPENAI_BASE_URL must be a valid http(s) URL.');
+    errors.push('OPENAI_BASE_URL must be a valid http(s) URL.');
   }
 
   const supaUrl = String(env.SUPABASE_URL || '').trim();

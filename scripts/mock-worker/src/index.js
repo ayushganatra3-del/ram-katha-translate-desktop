@@ -35,7 +35,7 @@ if ((env.MODE || 'live') === 'watchback') {
 } else {
   log(`[jarvis] audio input=${env.AUDIO_INPUT_DEVICE || '(system default)'}`);
 }
-log(`[jarvis] stt=${sttProvider} translation via ${env.TRANSLATION_OPENAI_BASE_URL || 'openrouter'}`);
+log(`[jarvis] stt=${sttProvider} translation via ${env.OPENAI_BASE_URL || 'openrouter'}`);
 log('[jarvis] loading canonical corpus from supabase…');
 
 // Crash mode for testing the auto-restart / circuit breaker.

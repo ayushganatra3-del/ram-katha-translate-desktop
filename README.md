@@ -157,7 +157,7 @@ All settings are edited in the **Settings** screen and stored in
 
 See [`.env.example`](.env.example) for the full annotated list. Critical values
 (pre-filled as defaults): `STT_PROVIDER=sarvam`,
-`TRANSLATION_OPENAI_BASE_URL=https://openrouter.ai/api/v1`,
+`OPENAI_BASE_URL=https://openrouter.ai/api/v1`,
 `DEFAULT_MODEL=google/gemini-2.5-flash`, `LOCKED_WORK_MODE=on`.
 
 The session source (mode / audio device / YouTube URL / start position) is set

@@ -83,7 +83,7 @@ async function testEnvStore() {
   await test('getDefaults locks in the critical runtime facts', () => {
     const d = envStore.getDefaults();
     assert.strictEqual(d.STT_PROVIDER, 'sarvam');
-    assert.strictEqual(d.TRANSLATION_OPENAI_BASE_URL, 'https://openrouter.ai/api/v1');
+    assert.strictEqual(d.OPENAI_BASE_URL, 'https://openrouter.ai/api/v1');
     assert.strictEqual(d.DEFAULT_MODEL, 'google/gemini-2.5-flash');
     assert.strictEqual(d.SARVAM_MODEL, 'saaras:v3');
     assert.strictEqual(d.LOCKED_WORK_MODE, 'on');
@@ -95,14 +95,14 @@ async function testEnvStore() {
       ...envStore.getDefaults(),
       SUPABASE_SERVICE_ROLE_KEY: 'eyJhbGciOi.JsdGVzdA',
       SESSION_CODE: 'GSJZ76',
-      TRANSLATION_OPENAI_API_KEY: 'sk-or-v1-abc with space #hash',
+      OPENAI_API_KEY: 'sk-or-v1-abc with space #hash',
     };
     const file = envStore.saveEnv(dir, cfg);
     assert.ok(fs.existsSync(file));
     const loaded = envStore.loadEnv(dir);
     assert.strictEqual(loaded.SESSION_CODE, 'GSJZ76');
     assert.strictEqual(loaded.SUPABASE_SERVICE_ROLE_KEY, 'eyJhbGciOi.JsdGVzdA');
-    assert.strictEqual(loaded.TRANSLATION_OPENAI_API_KEY, 'sk-or-v1-abc with space #hash');
+    assert.strictEqual(loaded.OPENAI_API_KEY, 'sk-or-v1-abc with space #hash');
   });
 
   await test('saveEnv + loadEnv preserves Windows paths (backslashes intact)', () => {
@@ -131,7 +131,7 @@ async function testEnvStore() {
       ...envStore.getDefaults(),
       SUPABASE_SERVICE_ROLE_KEY: 'k',
       SARVAM_API_KEY: 'k',
-      TRANSLATION_OPENAI_API_KEY: 'k',
+      OPENAI_API_KEY: 'k',
       SESSION_CODE: 'GSJZ76',
     };
     const r = envStore.validateConfig(env);
@@ -150,7 +150,7 @@ async function testEnvStore() {
       STT_PROVIDER: 'openai',
       SUPABASE_SERVICE_ROLE_KEY: 'k',
       SARVAM_API_KEY: 'k',
-      TRANSLATION_OPENAI_API_KEY: 'k',
+      OPENAI_API_KEY: 'k',
     };
     const r = envStore.validateConfig(env);
     assert.strictEqual(r.ok, false);
@@ -162,7 +162,7 @@ async function testEnvStore() {
       ...envStore.getDefaults(),
       SUPABASE_SERVICE_ROLE_KEY: 'k',
       SARVAM_API_KEY: 'k',
-      TRANSLATION_OPENAI_API_KEY: 'k',
+      OPENAI_API_KEY: 'k',
       SESSION_CODE: 'bad code!',
     };
     const r = envStore.validateConfig(env);
