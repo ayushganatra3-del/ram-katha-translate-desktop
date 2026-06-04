@@ -105,7 +105,7 @@ const SCHEMA = [
         required: true,
       },
       { key: 'SARVAM_MODEL', label: 'Sarvam Model', type: 'text', default: 'saaras:v3' },
-      { key: 'SARVAM_LANGUAGE_CODE', label: 'Language Code', type: 'text', default: 'hi-IN' },
+      { key: 'SARVAM_LANGUAGE_CODE', label: 'Language Code', type: 'text', default: 'gu-IN' },
     ],
   },
   {
